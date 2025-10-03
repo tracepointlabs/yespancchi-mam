@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>"Flipbook"</title>
+<style>
+:root{
+  --bg:#f6f6f7;
+  --control-bg: rgba(255,255,255,0.9);
+}
+html,body{height:100%;margin:0;background:var(--bg);font-family:system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial}
+#wrap{display:flex;align-items:center;justify-content:center;height:100vh;padding:8px;box-sizing:border-box}
+#book-frame{width:100%;max-width:1400px;height:90vh;position:relative;overflow:hidden}
+.turnjs-page img{width:100%;height:100%;object-fit:cover;display:block}
+.controls{position:absolute;left:12px;bottom:12px;z-index:999;display:flex;gap:8px}
+.btn{background:var(--control-bg);border-radius:6px;padding:8px;box-shadow:0 2px 6px rgba(0,0,0,0.12);cursor:pointer}
+#page-number{position:absolute;left:50%;transform:translateX(-50%);bottom:8px;background:transparent;color:#222;padding:4px 8px;border-radius:6px;font-size:13px}
+@media (max-width:768px){
+  #book-frame{max-width:900px;height:85vh}
+}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="book-frame" aria-label="Flipbook viewer">
+    <div id="flipbook"></div>
+    <div id="page-number"></div>
+    <div class="controls" role="toolbar" aria-label="Reader controls">
+      <div class="btn" id="btn-prev">◀</div>
+      <div class="btn" id="btn-next">▶</div>
+      <div class="btn" id="btn-zoom">🔍</div>
+      <div class="btn" id="btn-full">⤢</div>
+    </div>
+    <div id="thumbs" style="position:absolute;right:12px;bottom:12px"></div>
+  </div>
+</div>
+
+<!-- assets: jquery and turn.js should be in assets/ folder -->
+<script src="./assets/jquery.min.js"></script>
+<script src="./assets/turn.min.js"></script>
+<script>
+(function(){
+  const pages = [{"webp": "page-0001.webp", "webp2x": "page-0001@2x.webp", "png": "page-0001.png"}, {"webp": "page-0002.webp", "webp2x": "page-0002@2x.webp", "png": "page-0002.png"}, {"webp": "page-0003.webp", "webp2x": "page-0003@2x.webp", "png": "page-0003.png"}, {"webp": "page-0004.webp", "webp2x": "page-0004@2x.webp", "png": "page-0004.png"}]; // array of {webp, webp2x}
+  const flipbook = $("#flipbook");
+  // Build pages DOM
+  pages.forEach((p, i)=>{
+    const pageDiv = $('<div class="turnjs-page">');
+    const img = $(`<img data-src="./pages/${p.webp}" alt="Page ${i+1}" loading="lazy">`);
+    pageDiv.append(img);
+    flipbook.append(pageDiv);
+  });
+
+  // initialize Turn.js
+  const isMobile = window.matchMedia('(max-width:768px)').matches;
+  const displayMode = isMobile ? 'single' : 'double';
+  function initTurn(){
+    $('#flipbook').turn({
+      width: $('#book-frame').width(),
+      height: $('#book-frame').height(),
+      autoCenter: true,
+      display: displayMode,
+      elevation: 50,
+      gradients: true,
+      acceleration: true
+    });
+  }
+
+  // init after DOM size measured
+  initTurn();
+
+  // lazy-load visible pages + neighbors:
+  function loadPageImage(pageIndex){
+    // Turn.js pages are 1-indexed in API
+    const pageEl = $('#flipbook').turn('view')[0]; // view returns array of pages currently visible
+    // But we'll simply load img for provided index
+    const imgs = $('#flipbook img');
+    const img = imgs.eq(pageIndex);
+    if (img.length && !img.attr('src')) {
+      img.attr('src', img.data('src'));
+    }
+  }
+
+  function onTurn(e, page, view){
+    // view is array of pages visible after turn
+    // load visible pages and neighbors
+    const pagesToLoad = [];
+    view.forEach(pn=> pagesToLoad.push(pn-1));
+    view.forEach(pn=>{
+      if (pn-2>0) pagesToLoad.push(pn-2);
+      pagesToLoad.push(pn);
+      pagesToLoad.push(pn+1);
+    });
+    pagesToLoad.forEach(pi=>{
+      if (pi>=0 && pi < pages.length) {
+        const img = $('#flipbook img').eq(pi);
+        if (!img.attr('src')) img.attr('src', img.data('src'));
+      }
+    });
+    // update page number UI
+    const current = $('#flipbook').turn('page');
+    $('#page-number').text('Page ' + current + ' / ' + pages.length);
+  }
+
+  // Bind turn event
+  $('#flipbook').bind('turning', function(e, page, view) {
+    onTurn(e, page, view);
+  });
+
+  // Prev/Next buttons
+  document.getElementById('btn-prev').addEventListener('click', ()=> $('#flipbook').turn('previous'));
+  document.getElementById('btn-next').addEventListener('click', ()=> $('#flipbook').turn('next'));
+
+  // Keyboard nav
+  window.addEventListener('keydown', (e)=>{
+    if (e.key === 'ArrowLeft') $('#flipbook').turn('previous');
+    if (e.key === 'ArrowRight') $('#flipbook').turn('next');
+    if (e.key.toLowerCase() === 'f') {
+      if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+      else document.exitFullscreen();
+    }
+  });
+
+  // Thumbnails
+  const thumbs = $('#thumbs');
+  pages.forEach((p, i)=>{
+    const t = $('<img>').attr('src', './pages/'+p.webp).css({width:'48px',height:'64px',objectFit:'cover',margin:'4px',cursor:'pointer',borderRadius:'4px'});
+    t.on('click', ()=> $('#flipbook').turn('page', i+1));
+    thumbs.append(t);
+  });
+
+  // simple zoom toggle using CSS scale transform on container
+  let zoomed = false;
+  $('#btn-zoom').on('click', ()=>{
+    zoomed = !zoomed;
+    if (zoomed) $('#book-frame').css('transform','scale(1.6)').css('transition','transform 300ms');
+    else $('#book-frame').css('transform','none');
+  });
+
+  // double-tap on touch to zoom
+  let lastTap = 0;
+  $('#book-frame').on('touchend', ()=> {
+    const now = Date.now();
+    if (now - lastTap < 300) $('#btn-zoom').click();
+    lastTap = now;
+  });
+
+  // initial pre-load first 2 pages
+  $('#flipbook img').slice(0,4).each(function(){ $(this).attr('src', $(this).data('src')); });
+
+  // handle responsive resize: destroy & reinit
+  let resizeTimer;
+  window.addEventListener('resize', ()=>{
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(()=>{
+      try { $('#flipbook').turn('size', $('#book-frame').width(), $('#book-frame').height()); }
+      catch(e){ initTurn(); }
+    }, 200);
+  });
+
+})();
+</script>
+</body>
+</html>
