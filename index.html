@@ -2,162 +2,725 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>"Flipbook"</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
+<title>Flipbook</title>
 <style>
-:root{
-  --bg:#f6f6f7;
-  --control-bg: rgba(255,255,255,0.9);
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #1a1a1a;
+  --surface: #252525;
+  --surface-hover: #2f2f2f;
+  --text: #e8e8e8;
+  --text-dim: #a0a0a0;
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --border: rgba(255,255,255,0.08);
 }
-html,body{height:100%;margin:0;background:var(--bg);font-family:system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial}
-#wrap{display:flex;align-items:center;justify-content:center;height:100vh;padding:8px;box-sizing:border-box}
-#book-frame{width:100%;max-width:1400px;height:90vh;position:relative;overflow:hidden}
-.turnjs-page img{width:100%;height:100%;object-fit:cover;display:block}
-.controls{position:absolute;left:12px;bottom:12px;z-index:999;display:flex;gap:8px}
-.btn{background:var(--control-bg);border-radius:6px;padding:8px;box-shadow:0 2px 6px rgba(0,0,0,0.12);cursor:pointer}
-#page-number{position:absolute;left:50%;transform:translateX(-50%);bottom:8px;background:transparent;color:#222;padding:4px 8px;border-radius:6px;font-size:13px}
-@media (max-width:768px){
-  #book-frame{max-width:900px;height:85vh}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+  height: 100vh;
+}
+
+/* Loading */
+#loading {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  transition: opacity 0.4s ease;
+}
+#loading.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+.spinner {
+  width: 48px;
+  height: 48px;
+  border: 3px solid rgba(59, 130, 246, 0.2);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Main container */
+#app {
+  display: flex;
+  height: 100vh;
+}
+
+#main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Book viewer */
+#viewer {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  position: relative;
+}
+
+#flipbook {
+  outline: none;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+
+.turnjs-page {
+  background: white !important;
+  overflow: hidden;
+  cursor: pointer;
+  position: relative;
+}
+
+.turnjs-page img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.blank-page {
+  background: #fafafa !important;
+}
+
+/* Page click interaction - subtle */
+.page-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 45%;
+  z-index: 5;
+  transition: background 0.15s ease;
+}
+.page-zone.left { left: 0; }
+.page-zone.right { right: 0; }
+
+.page-zone:active {
+  background: rgba(0,0,0,0.05);
+}
+
+/* Bottom controls */
+#controls {
+  height: 70px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 0 20px;
+}
+
+.control-btn {
+  width: 44px;
+  height: 44px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  transition: all 0.2s ease;
+}
+
+.control-btn:hover {
+  background: var(--surface-hover);
+}
+
+.control-btn:active {
+  transform: scale(0.95);
+}
+
+#page-info {
+  padding: 10px 20px;
+  background: var(--surface-hover);
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-dim);
+  min-width: 100px;
+  text-align: center;
+}
+
+/* Right sidebar - thumbnails */
+#sidebar {
+  width: 0;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#sidebar.open {
+  width: 240px;
+}
+
+#sidebar-header {
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+#sidebar.open #sidebar-header {
+  opacity: 1;
+  transition-delay: 0.1s;
+}
+
+#sidebar-title {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+}
+
+#close-sidebar {
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+#close-sidebar:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+#thumbnails {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+#sidebar.open #thumbnails {
+  opacity: 1;
+  transition-delay: 0.15s;
+}
+
+#thumbnails::-webkit-scrollbar {
+  width: 8px;
+}
+
+#thumbnails::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#thumbnails::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.15);
+  border-radius: 4px;
+}
+
+#thumbnails::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.25);
+}
+
+.thumb {
+  margin-bottom: 12px;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  position: relative;
+  border: 2px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.thumb:hover {
+  border-color: var(--accent);
+  transform: translateX(-4px);
+}
+
+.thumb.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+.thumb img {
+  width: 100%;
+  display: block;
+  background: white;
+}
+
+.thumb-num {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  background: rgba(0,0,0,0.75);
+  color: white;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Toggle sidebar button */
+#toggle-sidebar {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  width: 48px;
+  height: 48px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  z-index: 100;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+#toggle-sidebar:hover {
+  background: var(--surface-hover);
+  transform: scale(1.05);
+}
+
+#toggle-sidebar:active {
+  transform: scale(0.95);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  #viewer { padding: 10px; }
+  #controls { height: 60px; gap: 8px; padding: 0 12px; }
+  .control-btn { width: 40px; height: 40px; font-size: 18px; }
+  #page-info { padding: 8px 16px; font-size: 13px; }
+  #sidebar.open { width: 200px; }
+  #toggle-sidebar { top: 12px; right: 12px; width: 44px; height: 44px; }
+}
+
+@media (max-width: 480px) {
+  #sidebar.open { 
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-width: 280px;
+    z-index: 200;
+    box-shadow: -4px 0 20px rgba(0,0,0,0.5);
+  }
 }
 </style>
 </head>
 <body>
-<div id="wrap">
-  <div id="book-frame" aria-label="Flipbook viewer">
-    <div id="flipbook"></div>
-    <div id="page-number"></div>
-    <div class="controls" role="toolbar" aria-label="Reader controls">
-      <div class="btn" id="btn-prev">◀</div>
-      <div class="btn" id="btn-next">▶</div>
-      <div class="btn" id="btn-zoom">🔍</div>
-      <div class="btn" id="btn-full">⤢</div>
+
+<div id="loading">
+  <div class="spinner"></div>
+</div>
+
+<div id="app">
+  <div id="main-content">
+    <div id="viewer">
+      <div id="flipbook"></div>
     </div>
-    <div id="thumbs" style="position:absolute;right:12px;bottom:12px"></div>
+    
+    <div id="controls">
+      <button class="control-btn" id="btn-first" title="First page (Home)">⏮</button>
+      <button class="control-btn" id="btn-prev" title="Previous (←)">◀</button>
+      <div id="page-info"></div>
+      <button class="control-btn" id="btn-next" title="Next (→)">▶</button>
+      <button class="control-btn" id="btn-last" title="Last page (End)">⏭</button>
+      <button class="control-btn" id="btn-zoom" title="Zoom">🔍</button>
+      <button class="control-btn" id="btn-fullscreen" title="Fullscreen">⛶</button>
+    </div>
+  </div>
+
+  <div id="sidebar">
+    <div id="sidebar-header">
+      <div id="sidebar-title">Pages</div>
+      <button id="close-sidebar">✕</button>
+    </div>
+    <div id="thumbnails"></div>
   </div>
 </div>
 
-<!-- assets: jquery and turn.js should be in assets/ folder -->
+<button id="toggle-sidebar" title="Show pages">☰</button>
+
+<script id="pages-data" type="application/json">[{"webp": "page-0001.webp", "webp2x": "page-0001@2x.webp", "png": "page-0001.png"}, {"webp": "page-0002.webp", "webp2x": "page-0002@2x.webp", "png": "page-0002.png"}, {"webp": "page-0003.webp", "webp2x": "page-0003@2x.webp", "png": "page-0003.png"}, {"webp": "page-0004.webp", "webp2x": "page-0004@2x.webp", "png": "page-0004.png"}, {"webp": "page-0005.webp", "webp2x": "page-0005@2x.webp", "png": "page-0005.png"}, {"webp": "page-0006.webp", "webp2x": "page-0006@2x.webp", "png": "page-0006.png"}, {"webp": "page-0007.webp", "webp2x": "page-0007@2x.webp", "png": "page-0007.png"}, {"webp": "page-0008.webp", "webp2x": "page-0008@2x.webp", "png": "page-0008.png"}, {"webp": "page-0009.webp", "webp2x": "page-0009@2x.webp", "png": "page-0009.png"}, {"webp": "page-0010.webp", "webp2x": "page-0010@2x.webp", "png": "page-0010.png"}, {"webp": "page-0011.webp", "webp2x": "page-0011@2x.webp", "png": "page-0011.png"}, {"webp": "page-0012.webp", "webp2x": "page-0012@2x.webp", "png": "page-0012.png"}, {"webp": "page-0013.webp", "webp2x": "page-0013@2x.webp", "png": "page-0013.png"}, {"webp": "page-0014.webp", "webp2x": "page-0014@2x.webp", "png": "page-0014.png"}, {"webp": "page-0015.webp", "webp2x": "page-0015@2x.webp", "png": "page-0015.png"}, {"webp": "page-0016.webp", "webp2x": "page-0016@2x.webp", "png": "page-0016.png"}, {"webp": "page-0017.webp", "webp2x": "page-0017@2x.webp", "png": "page-0017.png"}, {"webp": "page-0018.webp", "webp2x": "page-0018@2x.webp", "png": "page-0018.png"}, {"webp": "page-0019.webp", "webp2x": "page-0019@2x.webp", "png": "page-0019.png"}, {"webp": "page-0020.webp", "webp2x": "page-0020@2x.webp", "png": "page-0020.png"}, {"webp": "page-0021.webp", "webp2x": "page-0021@2x.webp", "png": "page-0021.png"}, {"webp": "page-0022.webp", "webp2x": "page-0022@2x.webp", "png": "page-0022.png"}, {"webp": "page-0023.webp", "webp2x": "page-0023@2x.webp", "png": "page-0023.png"}, {"webp": "page-0024.webp", "webp2x": "page-0024@2x.webp", "png": "page-0024.png"}, {"webp": "page-0025.webp", "webp2x": "page-0025@2x.webp", "png": "page-0025.png"}, {"webp": "page-0026.webp", "webp2x": "page-0026@2x.webp", "png": "page-0026.png"}, {"webp": "page-0027.webp", "webp2x": "page-0027@2x.webp", "png": "page-0027.png"}, {"webp": "page-0028.webp", "webp2x": "page-0028@2x.webp", "png": "page-0028.png"}, {"webp": "page-0029.webp", "webp2x": "page-0029@2x.webp", "png": "page-0029.png"}, {"webp": "page-0030.webp", "webp2x": "page-0030@2x.webp", "png": "page-0030.png"}, {"webp": "page-0031.webp", "webp2x": "page-0031@2x.webp", "png": "page-0031.png"}, {"webp": "page-0032.webp", "webp2x": "page-0032@2x.webp", "png": "page-0032.png"}, {"webp": "page-0033.webp", "webp2x": "page-0033@2x.webp", "png": "page-0033.png"}, {"webp": "page-0034.webp", "webp2x": "page-0034@2x.webp", "png": "page-0034.png"}, {"webp": "page-0035.webp", "webp2x": "page-0035@2x.webp", "png": "page-0035.png"}, {"webp": "page-0036.webp", "webp2x": "page-0036@2x.webp", "png": "page-0036.png"}, {"webp": "page-0037.webp", "webp2x": "page-0037@2x.webp", "png": "page-0037.png"}, {"webp": "page-0038.webp", "webp2x": "page-0038@2x.webp", "png": "page-0038.png"}, {"webp": "page-0039.webp", "webp2x": "page-0039@2x.webp", "png": "page-0039.png"}, {"webp": "page-0040.webp", "webp2x": "page-0040@2x.webp", "png": "page-0040.png"}, {"webp": "page-0041.webp", "webp2x": "page-0041@2x.webp", "png": "page-0041.png"}, {"webp": "page-0042.webp", "webp2x": "page-0042@2x.webp", "png": "page-0042.png"}, {"webp": "page-0043.webp", "webp2x": "page-0043@2x.webp", "png": "page-0043.png"}, {"webp": "page-0044.webp", "webp2x": "page-0044@2x.webp", "png": "page-0044.png"}, {"webp": "page-0045.webp", "webp2x": "page-0045@2x.webp", "png": "page-0045.png"}, {"webp": "page-0046.webp", "webp2x": "page-0046@2x.webp", "png": "page-0046.png"}, {"webp": "page-0047.webp", "webp2x": "page-0047@2x.webp", "png": "page-0047.png"}, {"webp": "page-0048.webp", "webp2x": "page-0048@2x.webp", "png": "page-0048.png"}, {"webp": "page-0049.webp", "webp2x": "page-0049@2x.webp", "png": "page-0049.png"}, {"webp": "page-0050.webp", "webp2x": "page-0050@2x.webp", "png": "page-0050.png"}, {"webp": "page-0051.webp", "webp2x": "page-0051@2x.webp", "png": "page-0051.png"}, {"webp": "page-0052.webp", "webp2x": "page-0052@2x.webp", "png": "page-0052.png"}, {"webp": "page-0053.webp", "webp2x": "page-0053@2x.webp", "png": "page-0053.png"}, {"webp": "page-0054.webp", "webp2x": "page-0054@2x.webp", "png": "page-0054.png"}, {"webp": "page-0055.webp", "webp2x": "page-0055@2x.webp", "png": "page-0055.png"}, {"webp": "page-0056.webp", "webp2x": "page-0056@2x.webp", "png": "page-0056.png"}, {"webp": "page-0057.webp", "webp2x": "page-0057@2x.webp", "png": "page-0057.png"}, {"webp": "page-0058.webp", "webp2x": "page-0058@2x.webp", "png": "page-0058.png"}, {"webp": "page-0059.webp", "webp2x": "page-0059@2x.webp", "png": "page-0059.png"}, {"webp": "page-0060.webp", "webp2x": "page-0060@2x.webp", "png": "page-0060.png"}, {"webp": "page-0061.webp", "webp2x": "page-0061@2x.webp", "png": "page-0061.png"}, {"webp": "page-0062.webp", "webp2x": "page-0062@2x.webp", "png": "page-0062.png"}, {"webp": "page-0063.webp", "webp2x": "page-0063@2x.webp", "png": "page-0063.png"}, {"webp": "page-0064.webp", "webp2x": "page-0064@2x.webp", "png": "page-0064.png"}, {"webp": "page-0065.webp", "webp2x": "page-0065@2x.webp", "png": "page-0065.png"}, {"webp": "page-0066.webp", "webp2x": "page-0066@2x.webp", "png": "page-0066.png"}, {"webp": "page-0067.webp", "webp2x": "page-0067@2x.webp", "png": "page-0067.png"}, {"webp": "page-0068.webp", "webp2x": "page-0068@2x.webp", "png": "page-0068.png"}, {"webp": "page-0069.webp", "webp2x": "page-0069@2x.webp", "png": "page-0069.png"}, {"webp": "page-0070.webp", "webp2x": "page-0070@2x.webp", "png": "page-0070.png"}, {"webp": "page-0071.webp", "webp2x": "page-0071@2x.webp", "png": "page-0071.png"}, {"webp": "page-0072.webp", "webp2x": "page-0072@2x.webp", "png": "page-0072.png"}, {"webp": "page-0073.webp", "webp2x": "page-0073@2x.webp", "png": "page-0073.png"}, {"webp": "page-0074.webp", "webp2x": "page-0074@2x.webp", "png": "page-0074.png"}, {"webp": "page-0075.webp", "webp2x": "page-0075@2x.webp", "png": "page-0075.png"}, {"webp": "page-0076.webp", "webp2x": "page-0076@2x.webp", "png": "page-0076.png"}, {"webp": "page-0077.webp", "webp2x": "page-0077@2x.webp", "png": "page-0077.png"}, {"webp": "page-0078.webp", "webp2x": "page-0078@2x.webp", "png": "page-0078.png"}, {"webp": "page-0079.webp", "webp2x": "page-0079@2x.webp", "png": "page-0079.png"}, {"webp": "page-0080.webp", "webp2x": "page-0080@2x.webp", "png": "page-0080.png"}, {"webp": "page-0081.webp", "webp2x": "page-0081@2x.webp", "png": "page-0081.png"}, {"webp": "page-0082.webp", "webp2x": "page-0082@2x.webp", "png": "page-0082.png"}, {"webp": "page-0083.webp", "webp2x": "page-0083@2x.webp", "png": "page-0083.png"}, {"webp": "page-0084.webp", "webp2x": "page-0084@2x.webp", "png": "page-0084.png"}, {"webp": "page-0085.webp", "webp2x": "page-0085@2x.webp", "png": "page-0085.png"}, {"webp": "page-0086.webp", "webp2x": "page-0086@2x.webp", "png": "page-0086.png"}, {"webp": "page-0087.webp", "webp2x": "page-0087@2x.webp", "png": "page-0087.png"}, {"webp": "page-0088.webp", "webp2x": "page-0088@2x.webp", "png": "page-0088.png"}, {"webp": "page-0089.webp", "webp2x": "page-0089@2x.webp", "png": "page-0089.png"}, {"webp": "page-0090.webp", "webp2x": "page-0090@2x.webp", "png": "page-0090.png"}, {"webp": "page-0091.webp", "webp2x": "page-0091@2x.webp", "png": "page-0091.png"}, {"webp": "page-0092.webp", "webp2x": "page-0092@2x.webp", "png": "page-0092.png"}, {"webp": "page-0093.webp", "webp2x": "page-0093@2x.webp", "png": "page-0093.png"}, {"webp": "page-0094.webp", "webp2x": "page-0094@2x.webp", "png": "page-0094.png"}, {"webp": "page-0095.webp", "webp2x": "page-0095@2x.webp", "png": "page-0095.png"}, {"webp": "page-0096.webp", "webp2x": "page-0096@2x.webp", "png": "page-0096.png"}, {"webp": "page-0097.webp", "webp2x": "page-0097@2x.webp", "png": "page-0097.png"}, {"webp": "page-0098.webp", "webp2x": "page-0098@2x.webp", "png": "page-0098.png"}, {"webp": "page-0099.webp", "webp2x": "page-0099@2x.webp", "png": "page-0099.png"}, {"webp": "page-0100.webp", "webp2x": "page-0100@2x.webp", "png": "page-0100.png"}, {"webp": "page-0101.webp", "webp2x": "page-0101@2x.webp", "png": "page-0101.png"}, {"webp": "page-0102.webp", "webp2x": "page-0102@2x.webp", "png": "page-0102.png"}, {"webp": "page-0103.webp", "webp2x": "page-0103@2x.webp", "png": "page-0103.png"}, {"webp": "page-0104.webp", "webp2x": "page-0104@2x.webp", "png": "page-0104.png"}, {"webp": "page-0105.webp", "webp2x": "page-0105@2x.webp", "png": "page-0105.png"}, {"webp": "page-0106.webp", "webp2x": "page-0106@2x.webp", "png": "page-0106.png"}, {"webp": "page-0107.webp", "webp2x": "page-0107@2x.webp", "png": "page-0107.png"}, {"webp": "page-0108.webp", "webp2x": "page-0108@2x.webp", "png": "page-0108.png"}, {"webp": "page-0109.webp", "webp2x": "page-0109@2x.webp", "png": "page-0109.png"}, {"webp": "page-0110.webp", "webp2x": "page-0110@2x.webp", "png": "page-0110.png"}, {"webp": "page-0111.webp", "webp2x": "page-0111@2x.webp", "png": "page-0111.png"}, {"webp": "page-0112.webp", "webp2x": "page-0112@2x.webp", "png": "page-0112.png"}, {"webp": "page-0113.webp", "webp2x": "page-0113@2x.webp", "png": "page-0113.png"}, {"webp": "page-0114.webp", "webp2x": "page-0114@2x.webp", "png": "page-0114.png"}, {"webp": "page-0115.webp", "webp2x": "page-0115@2x.webp", "png": "page-0115.png"}, {"webp": "page-0116.webp", "webp2x": "page-0116@2x.webp", "png": "page-0116.png"}, {"webp": "page-0117.webp", "webp2x": "page-0117@2x.webp", "png": "page-0117.png"}, {"webp": "page-0118.webp", "webp2x": "page-0118@2x.webp", "png": "page-0118.png"}, {"webp": "page-0119.webp", "webp2x": "page-0119@2x.webp", "png": "page-0119.png"}, {"webp": "page-0120.webp", "webp2x": "page-0120@2x.webp", "png": "page-0120.png"}, {"webp": "page-0121.webp", "webp2x": "page-0121@2x.webp", "png": "page-0121.png"}, {"webp": "page-0122.webp", "webp2x": "page-0122@2x.webp", "png": "page-0122.png"}, {"webp": "page-0123.webp", "webp2x": "page-0123@2x.webp", "png": "page-0123.png"}, {"webp": "page-0124.webp", "webp2x": "page-0124@2x.webp", "png": "page-0124.png"}, {"webp": "page-0125.webp", "webp2x": "page-0125@2x.webp", "png": "page-0125.png"}, {"webp": "page-0126.webp", "webp2x": "page-0126@2x.webp", "png": "page-0126.png"}, {"webp": "page-0127.webp", "webp2x": "page-0127@2x.webp", "png": "page-0127.png"}, {"webp": "page-0128.webp", "webp2x": "page-0128@2x.webp", "png": "page-0128.png"}, {"webp": "page-0129.webp", "webp2x": "page-0129@2x.webp", "png": "page-0129.png"}, {"webp": "page-0130.webp", "webp2x": "page-0130@2x.webp", "png": "page-0130.png"}, {"webp": "page-0131.webp", "webp2x": "page-0131@2x.webp", "png": "page-0131.png"}, {"webp": "page-0132.webp", "webp2x": "page-0132@2x.webp", "png": "page-0132.png"}, {"webp": "page-0133.webp", "webp2x": "page-0133@2x.webp", "png": "page-0133.png"}, {"webp": "page-0134.webp", "webp2x": "page-0134@2x.webp", "png": "page-0134.png"}, {"webp": "page-0135.webp", "webp2x": "page-0135@2x.webp", "png": "page-0135.png"}, {"webp": "page-0136.webp", "webp2x": "page-0136@2x.webp", "png": "page-0136.png"}, {"webp": "page-0137.webp", "webp2x": "page-0137@2x.webp", "png": "page-0137.png"}, {"webp": "page-0138.webp", "webp2x": "page-0138@2x.webp", "png": "page-0138.png"}, {"webp": "page-0139.webp", "webp2x": "page-0139@2x.webp", "png": "page-0139.png"}, {"webp": "page-0140.webp", "webp2x": "page-0140@2x.webp", "png": "page-0140.png"}, {"webp": "page-0141.webp", "webp2x": "page-0141@2x.webp", "png": "page-0141.png"}, {"webp": "page-0142.webp", "webp2x": "page-0142@2x.webp", "png": "page-0142.png"}, {"webp": "page-0143.webp", "webp2x": "page-0143@2x.webp", "png": "page-0143.png"}, {"webp": "page-0144.webp", "webp2x": "page-0144@2x.webp", "png": "page-0144.png"}, {"webp": "page-0145.webp", "webp2x": "page-0145@2x.webp", "png": "page-0145.png"}, {"webp": "page-0146.webp", "webp2x": "page-0146@2x.webp", "png": "page-0146.png"}, {"webp": "page-0147.webp", "webp2x": "page-0147@2x.webp", "png": "page-0147.png"}, {"webp": "page-0148.webp", "webp2x": "page-0148@2x.webp", "png": "page-0148.png"}, {"webp": "page-0149.webp", "webp2x": "page-0149@2x.webp", "png": "page-0149.png"}, {"webp": "page-0150.webp", "webp2x": "page-0150@2x.webp", "png": "page-0150.png"}, {"webp": "page-0151.webp", "webp2x": "page-0151@2x.webp", "png": "page-0151.png"}, {"webp": "page-0152.webp", "webp2x": "page-0152@2x.webp", "png": "page-0152.png"}, {"webp": "page-0153.webp", "webp2x": "page-0153@2x.webp", "png": "page-0153.png"}, {"webp": "page-0154.webp", "webp2x": "page-0154@2x.webp", "png": "page-0154.png"}, {"webp": "page-0155.webp", "webp2x": "page-0155@2x.webp", "png": "page-0155.png"}, {"webp": "page-0156.webp", "webp2x": "page-0156@2x.webp", "png": "page-0156.png"}, {"webp": "page-0157.webp", "webp2x": "page-0157@2x.webp", "png": "page-0157.png"}, {"webp": "page-0158.webp", "webp2x": "page-0158@2x.webp", "png": "page-0158.png"}, {"webp": "page-0159.webp", "webp2x": "page-0159@2x.webp", "png": "page-0159.png"}, {"webp": "page-0160.webp", "webp2x": "page-0160@2x.webp", "png": "page-0160.png"}, {"webp": "page-0161.webp", "webp2x": "page-0161@2x.webp", "png": "page-0161.png"}, {"webp": "page-0162.webp", "webp2x": "page-0162@2x.webp", "png": "page-0162.png"}, {"webp": "page-0163.webp", "webp2x": "page-0163@2x.webp", "png": "page-0163.png"}, {"webp": "page-0164.webp", "webp2x": "page-0164@2x.webp", "png": "page-0164.png"}, {"webp": "page-0165.webp", "webp2x": "page-0165@2x.webp", "png": "page-0165.png"}, {"webp": "page-0166.webp", "webp2x": "page-0166@2x.webp", "png": "page-0166.png"}, {"webp": "page-0167.webp", "webp2x": "page-0167@2x.webp", "png": "page-0167.png"}, {"webp": "page-0168.webp", "webp2x": "page-0168@2x.webp", "png": "page-0168.png"}, {"webp": "page-0169.webp", "webp2x": "page-0169@2x.webp", "png": "page-0169.png"}, {"webp": "page-0170.webp", "webp2x": "page-0170@2x.webp", "png": "page-0170.png"}, {"webp": "page-0171.webp", "webp2x": "page-0171@2x.webp", "png": "page-0171.png"}, {"webp": "page-0172.webp", "webp2x": "page-0172@2x.webp", "png": "page-0172.png"}, {"webp": "page-0173.webp", "webp2x": "page-0173@2x.webp", "png": "page-0173.png"}, {"webp": "page-0174.webp", "webp2x": "page-0174@2x.webp", "png": "page-0174.png"}, {"webp": "page-0175.webp", "webp2x": "page-0175@2x.webp", "png": "page-0175.png"}, {"webp": "page-0176.webp", "webp2x": "page-0176@2x.webp", "png": "page-0176.png"}, {"webp": "page-0177.webp", "webp2x": "page-0177@2x.webp", "png": "page-0177.png"}, {"webp": "page-0178.webp", "webp2x": "page-0178@2x.webp", "png": "page-0178.png"}, {"webp": "page-0179.webp", "webp2x": "page-0179@2x.webp", "png": "page-0179.png"}, {"webp": "page-0180.webp", "webp2x": "page-0180@2x.webp", "png": "page-0180.png"}, {"webp": "page-0181.webp", "webp2x": "page-0181@2x.webp", "png": "page-0181.png"}, {"webp": "page-0182.webp", "webp2x": "page-0182@2x.webp", "png": "page-0182.png"}, {"webp": "page-0183.webp", "webp2x": "page-0183@2x.webp", "png": "page-0183.png"}, {"webp": "page-0184.webp", "webp2x": "page-0184@2x.webp", "png": "page-0184.png"}]</script>
 <script src="./assets/jquery.min.js"></script>
 <script src="./assets/turn.min.js"></script>
+
 <script>
-(function(){
-  const pages = [{"webp": "page-0001.webp", "webp2x": "page-0001@2x.webp", "png": "page-0001.png"}, {"webp": "page-0002.webp", "webp2x": "page-0002@2x.webp", "png": "page-0002.png"}, {"webp": "page-0003.webp", "webp2x": "page-0003@2x.webp", "png": "page-0003.png"}, {"webp": "page-0004.webp", "webp2x": "page-0004@2x.webp", "png": "page-0004.png"}]; // array of {webp, webp2x}
-  const flipbook = $("#flipbook");
-  // Build pages DOM
-  pages.forEach((p, i)=>{
-    const pageDiv = $('<div class="turnjs-page">');
-    const img = $(`<img data-src="./pages/${p.webp}" alt="Page ${i+1}" loading="lazy">`);
-    pageDiv.append(img);
-    flipbook.append(pageDiv);
-  });
+(function() {
+  'use strict';
 
-  // initialize Turn.js
-  const isMobile = window.matchMedia('(max-width:768px)').matches;
-  const displayMode = isMobile ? 'single' : 'double';
-  function initTurn(){
-    $('#flipbook').turn({
-      width: $('#book-frame').width(),
-      height: $('#book-frame').height(),
-      autoCenter: true,
-      display: displayMode,
-      elevation: 50,
-      gradients: true,
-      acceleration: true
-    });
+  // Parse pages data
+  let pages = [];
+  try {
+    const raw = document.getElementById('pages-data').textContent;
+    pages = raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    console.error('Failed to parse pages:', e);
   }
 
-  // init after DOM size measured
-  initTurn();
+  // Elements
+  const loading = document.getElementById('loading');
+  const viewer = document.getElementById('viewer');
+  const sidebar = document.getElementById('sidebar');
+  const thumbnails = document.getElementById('thumbnails');
+  const toggleBtn = document.getElementById('toggle-sidebar');
+  const pageInfo = document.getElementById('page-info');
 
-  // lazy-load visible pages + neighbors:
-  function loadPageImage(pageIndex){
-    // Turn.js pages are 1-indexed in API
-    const pageEl = $('#flipbook').turn('view')[0]; // view returns array of pages currently visible
-    // But we'll simply load img for provided index
-    const imgs = $('#flipbook img');
-    const img = imgs.eq(pageIndex);
-    if (img.length && !img.attr('src')) {
-      img.attr('src', img.data('src'));
+  // State
+  let currentPage = 1;
+  let zoomed = false;
+  const MOBILE_BREAKPOINT = 768;
+
+  // Build page array with blank if odd
+  function buildPageArray() {
+    const arr = [];
+    if (pages.length % 2 === 1) {
+      arr.push({ blank: true });
     }
+    pages.forEach(p => arr.push(p));
+    return arr;
   }
 
-  function onTurn(e, page, view){
-    // view is array of pages visible after turn
-    // load visible pages and neighbors
-    const pagesToLoad = [];
-    view.forEach(pn=> pagesToLoad.push(pn-1));
-    view.forEach(pn=>{
-      if (pn-2>0) pagesToLoad.push(pn-2);
-      pagesToLoad.push(pn);
-      pagesToLoad.push(pn+1);
-    });
-    pagesToLoad.forEach(pi=>{
-      if (pi>=0 && pi < pages.length) {
-        const img = $('#flipbook img').eq(pi);
-        if (!img.attr('src')) img.attr('src', img.data('src'));
+  const pageArray = buildPageArray();
+
+  // Preload images
+  function preloadImages(indices) {
+    indices.forEach(idx => {
+      if (idx >= 0 && idx < pageArray.length && !pageArray[idx].blank) {
+        const p = pageArray[idx];
+        const img = new Image();
+        img.src = './pages/' + p.webp;
+        if (p.webp2x) {
+          const img2 = new Image();
+          img2.src = './pages/' + p.webp2x;
+        }
       }
     });
-    // update page number UI
-    const current = $('#flipbook').turn('page');
-    $('#page-number').text('Page ' + current + ' / ' + pages.length);
   }
 
-  // Bind turn event
-  $('#flipbook').bind('turning', function(e, page, view) {
-    onTurn(e, page, view);
+  // Get first real page for aspect ratio
+  function getFirstSrc() {
+    for (let p of pageArray) {
+      if (!p.blank) return './pages/' + p.webp;
+    }
+    return null;
+  }
+
+  // Initialize flipbook
+  function initFlipbook() {
+    const firstSrc = getFirstSrc();
+    if (!firstSrc) {
+      setupFlipbook(210/297);
+      return;
+    }
+
+    const img = new Image();
+    img.onload = () => setupFlipbook(img.naturalWidth / img.naturalHeight);
+    img.onerror = () => setupFlipbook(210/297);
+    img.src = firstSrc;
+  }
+
+  function setupFlipbook(aspect) {
+    const isMobile = window.innerWidth <= MOBILE_BREAKPOINT;
+    const mode = isMobile ? 'single' : 'double';
+    
+    const box = viewer.getBoundingClientRect();
+    const availW = box.width - 40;
+    const availH = box.height - 40;
+
+    let width, height;
+    if (mode === 'double') {
+      const pageW = Math.min(availW / 2, availH * aspect);
+      const pageH = pageW / aspect;
+      width = pageW * 2;
+      height = pageH;
+    } else {
+      height = Math.min(availH, availW / aspect);
+      width = height * aspect;
+    }
+
+    // Clear and rebuild
+    const fb = $('#flipbook');
+    try {
+      if (fb.data('turn')) fb.turn('destroy');
+    } catch (e) {}
+    fb.empty();
+
+    // Create pages
+    pageArray.forEach((p, idx) => {
+      const div = $('<div>').addClass('turnjs-page');
+      
+      if (p.blank) {
+        div.addClass('blank-page');
+      } else {
+        const img = $('<img>')
+          .attr('src', './pages/' + p.webp)
+          .attr('alt', 'Page ' + (idx + 1));
+        
+        if (p.webp2x) {
+          img.attr('srcset', './pages/' + p.webp2x + ' 2x');
+        }
+        
+        div.append(img);
+      }
+      
+      fb.append(div);
+    });
+
+    // Initialize turn.js
+    fb.css({ width: width + 'px', height: height + 'px' });
+    
+    try {
+      fb.turn({
+        width: width,
+        height: height,
+        autoCenter: true,
+        display: mode,
+        pages: pageArray.length,
+        elevation: 50,
+        gradients: true,
+        acceleration: true,
+        duration: 600,
+        when: {
+          turning: (e, page, view) => {
+            preloadForView(view);
+          },
+          turned: (e, page) => {
+            currentPage = page;
+            updateUI();
+          }
+        }
+      });
+    } catch (err) {
+      console.error('Turn.js error:', err);
+    }
+
+    // Add click zones
+    addClickZones();
+    
+    // Initial preload and setup
+    preloadImages([0, 1, 2, 3, 4, 5, 6, 7]);
+    buildThumbnails();
+    updateUI();
+
+    // Hide loading
+    setTimeout(() => {
+      loading.classList.add('hidden');
+    }, 400);
+  }
+
+  function addClickZones() {
+    setTimeout(() => {
+      $('.turnjs-page').each(function() {
+        const page = $(this);
+        page.find('.page-zone').remove();
+        
+        const left = $('<div class="page-zone left"></div>');
+        const right = $('<div class="page-zone right"></div>');
+        
+        left.on('click', e => {
+          e.stopPropagation();
+          prevPage();
+        });
+        
+        right.on('click', e => {
+          e.stopPropagation();
+          nextPage();
+        });
+        
+        page.append(left, right);
+      });
+    }, 100);
+  }
+
+  function preloadForView(view) {
+    const toLoad = new Set();
+    view.forEach(v => {
+      for (let i = v - 2; i <= v + 2; i++) {
+        toLoad.add(i);
+      }
+    });
+    preloadImages(Array.from(toLoad));
+  }
+
+  // Build thumbnails
+  function buildThumbnails() {
+    thumbnails.innerHTML = '';
+    
+    pageArray.forEach((p, idx) => {
+      if (p.blank) return;
+      
+      const thumb = document.createElement('div');
+      thumb.className = 'thumb';
+      thumb.dataset.page = idx + 1;
+      
+      const img = document.createElement('img');
+      img.src = './pages/' + p.webp;
+      img.alt = 'Page ' + (idx + 1);
+      
+      const num = document.createElement('div');
+      num.className = 'thumb-num';
+      num.textContent = idx + 1;
+      
+      thumb.appendChild(img);
+      thumb.appendChild(num);
+      
+      thumb.addEventListener('click', () => {
+        goToPage(parseInt(thumb.dataset.page));
+        if (window.innerWidth <= 480) {
+          sidebar.classList.remove('open');
+        }
+      });
+      
+      thumbnails.appendChild(thumb);
+    });
+  }
+
+  // UI updates
+  function updateUI() {
+    const total = pageArray.length;
+    pageInfo.textContent = `${currentPage} / ${total}`;
+    
+    // Update thumbnails
+    document.querySelectorAll('.thumb').forEach(thumb => {
+      if (parseInt(thumb.dataset.page) === currentPage) {
+        thumb.classList.add('active');
+        thumb.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } else {
+        thumb.classList.remove('active');
+      }
+    });
+  }
+
+  // Navigation functions
+  function prevPage() {
+    try { $('#flipbook').turn('previous'); } catch (e) {}
+  }
+
+  function nextPage() {
+    try { $('#flipbook').turn('next'); } catch (e) {}
+  }
+
+  function goToPage(page) {
+    try { $('#flipbook').turn('page', page); } catch (e) {}
+  }
+
+  function firstPage() {
+    goToPage(1);
+  }
+
+  function lastPage() {
+    goToPage(pageArray.length);
+  }
+
+  // Controls
+  document.getElementById('btn-prev').addEventListener('click', prevPage);
+  document.getElementById('btn-next').addEventListener('click', nextPage);
+  document.getElementById('btn-first').addEventListener('click', firstPage);
+  document.getElementById('btn-last').addEventListener('click', lastPage);
+
+  document.getElementById('btn-zoom').addEventListener('click', () => {
+    zoomed = !zoomed;
+    viewer.style.transform = zoomed ? 'scale(1.3)' : 'scale(1)';
+    viewer.style.transition = 'transform 0.3s ease';
   });
 
-  // Prev/Next buttons
-  document.getElementById('btn-prev').addEventListener('click', ()=> $('#flipbook').turn('previous'));
-  document.getElementById('btn-next').addEventListener('click', ()=> $('#flipbook').turn('next'));
-
-  // Keyboard nav
-  window.addEventListener('keydown', (e)=>{
-    if (e.key === 'ArrowLeft') $('#flipbook').turn('previous');
-    if (e.key === 'ArrowRight') $('#flipbook').turn('next');
-    if (e.key.toLowerCase() === 'f') {
-      if (!document.fullscreenElement) document.documentElement.requestFullscreen();
-      else document.exitFullscreen();
+  document.getElementById('btn-fullscreen').addEventListener('click', () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(e => {});
+    } else {
+      document.exitFullscreen();
     }
   });
 
-  // Thumbnails
-  const thumbs = $('#thumbs');
-  pages.forEach((p, i)=>{
-    const t = $('<img>').attr('src', './pages/'+p.webp).css({width:'48px',height:'64px',objectFit:'cover',margin:'4px',cursor:'pointer',borderRadius:'4px'});
-    t.on('click', ()=> $('#flipbook').turn('page', i+1));
-    thumbs.append(t);
+  // Sidebar toggle
+  toggleBtn.addEventListener('click', () => {
+    sidebar.classList.toggle('open');
+    if (sidebar.classList.contains('open')) {
+      updateUI();
+    }
   });
 
-  // simple zoom toggle using CSS scale transform on container
-  let zoomed = false;
-  $('#btn-zoom').on('click', ()=>{
-    zoomed = !zoomed;
-    if (zoomed) $('#book-frame').css('transform','scale(1.6)').css('transition','transform 300ms');
-    else $('#book-frame').css('transform','none');
+  document.getElementById('close-sidebar').addEventListener('click', () => {
+    sidebar.classList.remove('open');
   });
 
-  // double-tap on touch to zoom
-  let lastTap = 0;
-  $('#book-frame').on('touchend', ()=> {
-    const now = Date.now();
-    if (now - lastTap < 300) $('#btn-zoom').click();
-    lastTap = now;
+  // Keyboard navigation
+  window.addEventListener('keydown', e => {
+    switch(e.key) {
+      case 'ArrowLeft':
+      case 'PageUp':
+        prevPage();
+        break;
+      case 'ArrowRight':
+      case 'PageDown':
+      case ' ':
+        e.preventDefault();
+        nextPage();
+        break;
+      case 'Home':
+        firstPage();
+        break;
+      case 'End':
+        lastPage();
+        break;
+      case 'Escape':
+        sidebar.classList.remove('open');
+        break;
+    }
   });
 
-  // initial pre-load first 2 pages
-  $('#flipbook img').slice(0,4).each(function(){ $(this).attr('src', $(this).data('src')); });
-
-  // handle responsive resize: destroy & reinit
+  // Resize handler
   let resizeTimer;
-  window.addEventListener('resize', ()=>{
+  window.addEventListener('resize', () => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(()=>{
-      try { $('#flipbook').turn('size', $('#book-frame').width(), $('#book-frame').height()); }
-      catch(e){ initTurn(); }
-    }, 200);
+    resizeTimer = setTimeout(() => {
+      const prevPage = currentPage;
+      initFlipbook();
+      setTimeout(() => {
+        goToPage(prevPage);
+      }, 100);
+    }, 250);
   });
 
+  // Start
+  initFlipbook();
 })();
 </script>
 </body>
