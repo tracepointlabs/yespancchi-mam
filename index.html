@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=5,user-scalable=yes" />
 <title>Flipbook</title>
 <style>
 * { 
@@ -13,7 +13,7 @@
 }
 
 :root {
-  --bg: #1a1a1a;
+  --bg: #2b2b2b;
   --surface: #252525;
   --surface-hover: #2f2f2f;
   --text: #e8e8e8;
@@ -82,16 +82,31 @@ html, body {
   justify-content: center;
   padding: 20px;
   position: relative;
-  will-change: transform;
-  transform: translateZ(0);
+  overflow: hidden;
+}
+
+#book-container {
+  position: relative;
+  cursor: grab;
+  transition: transform 0.3s ease;
+}
+
+#book-container.zoomed {
+  cursor: move;
+}
+
+#book-container.grabbing {
+  cursor: grabbing;
 }
 
 #flipbook {
   outline: none;
-  box-shadow: 0 20px 70px rgba(0,0,0,0.6);
+  box-shadow: 0 30px 80px rgba(0,0,0,0.8), 0 0 40px rgba(0,0,0,0.4);
   transform-style: preserve-3d;
   will-change: transform;
   transform: translateZ(0);
+  border-radius: 3px;
+  overflow: visible;
 }
 
 .turnjs-page {
@@ -100,6 +115,28 @@ html, body {
   transform: translateZ(0);
   backface-visibility: hidden;
   will-change: transform;
+  box-shadow: inset 0 0 30px rgba(0,0,0,0.1);
+  position: relative;
+}
+
+.turnjs-page::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 30px;
+  background: linear-gradient(to right, rgba(0,0,0,0.15), transparent);
+  z-index: 1;
+  pointer-events: none;
+}
+
+.turnjs-page:nth-child(even)::before {
+  left: 0;
+}
+
+.turnjs-page:nth-child(odd)::before {
+  right: 0;
+  background: linear-gradient(to left, rgba(0,0,0,0.15), transparent);
 }
 
 .turnjs-page img {
@@ -114,7 +151,65 @@ html, body {
 }
 
 .blank-page {
-  background: #f9f9f9 !important;
+  background: linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%) !important;
+}
+
+.page-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 48%;
+  z-index: 10;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.page-zone.left {
+  left: 0;
+}
+
+.page-zone.right {
+  right: 0;
+}
+
+.page-zone:hover {
+  background: rgba(0,0,0,0.02);
+}
+
+.page-zone.left:hover::after {
+  content: '◀';
+  position: absolute;
+  left: 30px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 28px;
+  color: rgba(0,0,0,0.15);
+  animation: slideLeft 0.6s ease-in-out infinite;
+}
+
+.page-zone.right:hover::after {
+  content: '▶';
+  position: absolute;
+  right: 30px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 28px;
+  color: rgba(0,0,0,0.15);
+  animation: slideRight 0.6s ease-in-out infinite;
+}
+
+@keyframes slideLeft {
+  0%, 100% { transform: translateY(-50%) translateX(0); }
+  50% { transform: translateY(-50%) translateX(-5px); }
+}
+
+@keyframes slideRight {
+  0%, 100% { transform: translateY(-50%) translateX(0); }
+  50% { transform: translateY(-50%) translateX(5px); }
+}
+
+#book-container.zoomed .page-zone {
+  display: none;
 }
 
 #controls {
@@ -152,6 +247,11 @@ html, body {
   transform: scale(0.92);
 }
 
+.control-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
 #page-info {
   padding: 10px 20px;
   background: var(--surface-hover);
@@ -160,6 +260,17 @@ html, body {
   font-weight: 500;
   color: var(--text-dim);
   min-width: 110px;
+  text-align: center;
+  user-select: none;
+}
+
+#zoom-level {
+  padding: 8px 16px;
+  background: var(--surface-hover);
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--text-dim);
+  min-width: 80px;
   text-align: center;
   user-select: none;
 }
@@ -257,16 +368,18 @@ html, body {
   position: relative;
   border: 2px solid transparent;
   transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
 
 .thumb:hover {
   border-color: var(--accent);
   transform: translateX(-4px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
 }
 
 .thumb.active {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
 }
 
 .thumb img {
@@ -316,8 +429,8 @@ html, body {
   #viewer { padding: 10px 10px 80px 10px; }
   #controls { 
     height: 70px; 
-    gap: 8px; 
-    padding: 0 12px;
+    gap: 6px; 
+    padding: 0 8px;
     position: fixed;
     bottom: 0;
     left: 0;
@@ -325,11 +438,17 @@ html, body {
     z-index: 100;
     background: var(--surface);
     box-shadow: 0 -4px 12px rgba(0,0,0,0.3);
+    overflow-x: auto;
   }
-  .control-btn { width: 42px; height: 42px; font-size: 18px; }
-  #page-info { padding: 8px 12px; font-size: 13px; min-width: 80px; }
+  .control-btn { width: 40px; height: 40px; font-size: 18px; flex-shrink: 0; }
+  #page-info { padding: 8px 12px; font-size: 13px; min-width: 75px; flex-shrink: 0; }
+  #zoom-level { padding: 6px 10px; font-size: 12px; min-width: 65px; flex-shrink: 0; }
   #sidebar.open { width: 200px; }
   #toggle-sidebar { top: 12px; right: 12px; width: 44px; height: 44px; }
+  .page-zone.left:hover::after,
+  .page-zone.right:hover::after {
+    display: none;
+  }
 }
 
 @media (max-width: 480px) {
@@ -353,16 +472,21 @@ html, body {
 <div id="app">
   <div id="main-content">
     <div id="viewer">
-      <div id="flipbook"></div>
+      <div id="book-container">
+        <div id="flipbook"></div>
+      </div>
     </div>
     
     <div id="controls">
       <button class="control-btn" id="btn-first" title="First page">⏮</button>
-      <button class="control-btn" id="btn-prev" title="Previous (←)">◀</button>
+      <button class="control-btn" id="btn-prev" title="Previous">◀</button>
       <div id="page-info"></div>
-      <button class="control-btn" id="btn-next" title="Next (→)">▶</button>
+      <button class="control-btn" id="btn-next" title="Next">▶</button>
       <button class="control-btn" id="btn-last" title="Last page">⏭</button>
-      <button class="control-btn" id="btn-zoom" title="Zoom">🔍</button>
+      <button class="control-btn" id="btn-zoom-out" title="Zoom out">🔍−</button>
+      <div id="zoom-level">100%</div>
+      <button class="control-btn" id="btn-zoom-in" title="Zoom in">🔍+</button>
+      <button class="control-btn" id="btn-zoom-reset" title="Reset zoom">⟲</button>
       <button class="control-btn" id="btn-fullscreen" title="Fullscreen">⛶</button>
     </div>
   </div>
@@ -390,8 +514,9 @@ html, body {
     MOBILE_BREAKPOINT: 768,
     TURN_DURATION: 600,
     TURN_ELEVATION: 50,
-    PRELOAD_RANGE: 2,
-    ZOOM_SCALE: 1.4,
+    ZOOM_MIN: 1,
+    ZOOM_MAX: 3,
+    ZOOM_STEP: 0.25,
     RESIZE_DEBOUNCE: 250
   };
 
@@ -405,13 +530,18 @@ html, body {
 
   const loading = document.getElementById('loading');
   const viewer = document.getElementById('viewer');
+  const bookContainer = document.getElementById('book-container');
   const sidebar = document.getElementById('sidebar');
   const thumbnails = document.getElementById('thumbnails');
   const pageInfo = document.getElementById('page-info');
+  const zoomLevel = document.getElementById('zoom-level');
 
   let currentPage = 1;
-  let zoomed = false;
+  let zoomScale = 1;
   let turnInstance = null;
+  let isPanning = false;
+  let panStart = { x: 0, y: 0 };
+  let panOffset = { x: 0, y: 0 };
 
   function buildPageArray() {
     const arr = [];
@@ -527,6 +657,7 @@ html, body {
       });
       
       turnInstance = true;
+      addClickZones();
     } catch (err) {
       console.error('Turn.js error:', err);
     }
@@ -536,6 +667,30 @@ html, body {
     
     setTimeout(() => {
       loading.classList.add('hidden');
+    }, 100);
+  }
+
+  function addClickZones() {
+    setTimeout(() => {
+      $('.turnjs-page').each(function() {
+        const page = $(this);
+        page.find('.page-zone').remove();
+        
+        const left = $('<div class="page-zone left"></div>');
+        const right = $('<div class="page-zone right"></div>');
+        
+        left.on('click', e => {
+          e.stopPropagation();
+          if (zoomScale === 1) prevPage();
+        });
+        
+        right.on('click', e => {
+          e.stopPropagation();
+          if (zoomScale === 1) nextPage();
+        });
+        
+        page.append(left, right);
+      });
     }, 100);
   }
 
@@ -574,6 +729,11 @@ html, body {
 
   function updateUI() {
     pageInfo.textContent = `${currentPage} / ${pageArray.length}`;
+    zoomLevel.textContent = Math.round(zoomScale * 100) + '%';
+    
+    document.getElementById('btn-zoom-in').disabled = zoomScale >= CONFIG.ZOOM_MAX;
+    document.getElementById('btn-zoom-out').disabled = zoomScale <= CONFIG.ZOOM_MIN;
+    document.getElementById('btn-zoom-reset').disabled = zoomScale === 1 && panOffset.x === 0 && panOffset.y === 0;
     
     document.querySelectorAll('.thumb').forEach(thumb => {
       if (parseInt(thumb.dataset.page) === currentPage) {
@@ -586,6 +746,87 @@ html, body {
       }
     });
   }
+
+  function applyZoom() {
+    const transform = `scale(${zoomScale}) translate(${panOffset.x}px, ${panOffset.y}px)`;
+    bookContainer.style.transform = transform;
+    
+    if (zoomScale > 1) {
+      bookContainer.classList.add('zoomed');
+    } else {
+      bookContainer.classList.remove('zoomed');
+    }
+    
+    updateUI();
+  }
+
+  function zoomIn() {
+    if (zoomScale < CONFIG.ZOOM_MAX) {
+      zoomScale = Math.min(CONFIG.ZOOM_MAX, zoomScale + CONFIG.ZOOM_STEP);
+      applyZoom();
+    }
+  }
+
+  function zoomOut() {
+    if (zoomScale > CONFIG.ZOOM_MIN) {
+      zoomScale = Math.max(CONFIG.ZOOM_MIN, zoomScale - CONFIG.ZOOM_STEP);
+      if (zoomScale === 1) {
+        panOffset = { x: 0, y: 0 };
+      }
+      applyZoom();
+    }
+  }
+
+  function resetZoom() {
+    zoomScale = 1;
+    panOffset = { x: 0, y: 0 };
+    applyZoom();
+  }
+
+  bookContainer.addEventListener('mousedown', e => {
+    if (zoomScale > 1) {
+      isPanning = true;
+      panStart = { x: e.clientX - panOffset.x, y: e.clientY - panOffset.y };
+      bookContainer.classList.add('grabbing');
+    }
+  });
+
+  document.addEventListener('mousemove', e => {
+    if (isPanning && zoomScale > 1) {
+      panOffset.x = e.clientX - panStart.x;
+      panOffset.y = e.clientY - panStart.y;
+      applyZoom();
+    }
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (isPanning) {
+      isPanning = false;
+      bookContainer.classList.remove('grabbing');
+    }
+  });
+
+  bookContainer.addEventListener('touchstart', e => {
+    if (zoomScale > 1 && e.touches.length === 1) {
+      isPanning = true;
+      const touch = e.touches[0];
+      panStart = { x: touch.clientX - panOffset.x, y: touch.clientY - panOffset.y };
+    }
+  });
+
+  bookContainer.addEventListener('touchmove', e => {
+    if (isPanning && zoomScale > 1 && e.touches.length === 1) {
+      e.preventDefault();
+      const touch = e.touches[0];
+      panOffset.x = touch.clientX - panStart.x;
+      panOffset.y = touch.clientY - panStart.y;
+      applyZoom();
+    }
+  }, { passive: false });
+
+  bookContainer.addEventListener('touchend', () => {
+    isPanning = false;
+  });
 
   function prevPage() {
     try { $('#flipbook').turn('previous'); } catch (e) {}
@@ -611,12 +852,9 @@ html, body {
   document.getElementById('btn-next').addEventListener('click', nextPage);
   document.getElementById('btn-first').addEventListener('click', firstPage);
   document.getElementById('btn-last').addEventListener('click', lastPage);
-
-  document.getElementById('btn-zoom').addEventListener('click', () => {
-    zoomed = !zoomed;
-    viewer.style.transform = zoomed ? `scale(${CONFIG.ZOOM_SCALE})` : 'scale(1)';
-    viewer.style.transition = 'transform 0.3s ease';
-  });
+  document.getElementById('btn-zoom-in').addEventListener('click', zoomIn);
+  document.getElementById('btn-zoom-out').addEventListener('click', zoomOut);
+  document.getElementById('btn-zoom-reset').addEventListener('click', resetZoom);
 
   document.getElementById('btn-fullscreen').addEventListener('click', () => {
     if (!document.fullscreenElement) {
@@ -642,13 +880,13 @@ html, body {
       case 'ArrowLeft':
       case 'PageUp':
         e.preventDefault();
-        prevPage();
+        if (zoomScale === 1) prevPage();
         break;
       case 'ArrowRight':
       case 'PageDown':
       case ' ':
         e.preventDefault();
-        nextPage();
+        if (zoomScale === 1) nextPage();
         break;
       case 'Home':
         e.preventDefault();
@@ -657,6 +895,20 @@ html, body {
       case 'End':
         e.preventDefault();
         lastPage();
+        break;
+      case '+':
+      case '=':
+        e.preventDefault();
+        zoomIn();
+        break;
+      case '-':
+      case '_':
+        e.preventDefault();
+        zoomOut();
+        break;
+      case '0':
+        e.preventDefault();
+        resetZoom();
         break;
       case 'Escape':
         sidebar.classList.remove('open');
@@ -670,8 +922,7 @@ html, body {
   document.addEventListener('fullscreenchange', () => {
     setTimeout(() => {
       const prevPage = currentPage;
-      zoomed = false;
-      viewer.style.transform = 'scale(1)';
+      resetZoom();
       initFlipbook();
       setTimeout(() => goToPage(prevPage), 100);
     }, 100);
@@ -682,8 +933,7 @@ html, body {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
       const prevPage = currentPage;
-      zoomed = false;
-      viewer.style.transform = 'scale(1)';
+      resetZoom();
       initFlipbook();
       setTimeout(() => goToPage(prevPage), 100);
     }, CONFIG.RESIZE_DEBOUNCE);
